@@ -1,0 +1,167 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const corsHeaders = {
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Max-Age': '86400',
+  'Content-Type': 'application/json',
+  'Vary': 'Origin',
+};
+
+const allowedOrigins = new Set([
+  'https://idxtry.github.io',
+  'http://127.0.0.1:5173',
+  'http://localhost:5173',
+]);
+
+function response(body: unknown, status: number, origin: string) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Access-Control-Allow-Origin': origin },
+  });
+}
+
+function validSymbol(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Z][A-Z0-9.-]{0,11}$/.test(value);
+}
+
+Deno.serve(async (request) => {
+  const origin = request.headers.get('Origin') || '';
+  if (!allowedOrigins.has(origin)) {
+    return new Response('Origin not allowed', { status: 403 });
+  }
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: { ...corsHeaders, 'Access-Control-Allow-Origin': origin } });
+  }
+  if (request.method !== 'POST') {
+    return response({ ok: false, error: 'Use a POST request.' }, 405, origin);
+  }
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  const authorization = request.headers.get('Authorization');
+  if (!supabaseUrl || !anonKey || !authorization) {
+    return response({ ok: false, error: 'A signed-in club account is required.' }, 401, origin);
+  }
+
+  const supabase = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authorization } },
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData.user) {
+    return response({ ok: false, error: 'Your session expired. Sign in again to load market data.' }, 401, origin);
+  }
+  const { data: member, error: memberError } = await supabase
+    .from('members')
+    .select('role')
+    .eq('id', userData.user.id)
+    .maybeSingle();
+  if (memberError || !member || !['intern', 'manager'].includes(member.role)) {
+    return response({ ok: false, error: 'A manager must activate your club membership before market data is available.' }, 403, origin);
+  }
+
+  const keyId = Deno.env.get('ALPACA_API_KEY_ID');
+  const keySecret = Deno.env.get('ALPACA_API_SECRET_KEY');
+  if (!keyId || !keySecret) {
+    return response({ ok: false, code: 'FEED_NOT_CONFIGURED', error: 'Alpaca IEX keys are not connected. Open Setup for the free feed instructions.' }, 503, origin);
+  }
+
+  let input: Record<string, unknown>;
+  try {
+    input = await request.json();
+  } catch {
+    return response({ ok: false, error: 'Request body must be valid JSON.' }, 400, origin);
+  }
+
+  const headers = { 'APCA-API-KEY-ID': keyId, 'APCA-API-SECRET-KEY': keySecret };
+  try {
+    if (input.action === 'snapshots') {
+      const rawSymbols = Array.isArray(input.symbols) ? input.symbols : [];
+      const symbols = [...new Set(rawSymbols.map((symbol) => String(symbol).toUpperCase()))];
+      if (!symbols.length || symbols.length > 40 || !symbols.every(validSymbol)) {
+        return response({ ok: false, error: 'Choose between 1 and 40 valid US stock or ETF symbols.' }, 400, origin);
+      }
+      const url = new URL('https://data.alpaca.markets/v2/stocks/snapshots');
+      url.searchParams.set('symbols', symbols.join(','));
+      url.searchParams.set('feed', 'iex');
+      const upstream = await fetch(url, { headers, signal: AbortSignal.timeout(12_000) });
+      if (!upstream.ok) return providerError(upstream, origin);
+      const payload = await upstream.json();
+      const quotes = Object.fromEntries(Object.entries(payload).map(([symbol, snapshot]: [string, any]) => {
+        const trade = snapshot.latestTrade || {};
+        const daily = snapshot.dailyBar || {};
+        const previous = snapshot.prevDailyBar || {};
+        const quote = snapshot.latestQuote || {};
+        const price = Number(trade.p || daily.c || 0);
+        const previousClose = Number(previous.c || 0);
+        const change = previousClose ? price - previousClose : 0;
+        const timestamp = trade.t || daily.t || null;
+        return [symbol, {
+          symbol,
+          price,
+          change,
+          changePercent: previousClose ? (change / previousClose) * 100 : 0,
+          open: Number(daily.o || 0),
+          high: Number(daily.h || 0),
+          low: Number(daily.l || 0),
+          previousClose,
+          volume: Number(daily.v || 0),
+          bid: Number(quote.bp || 0),
+          ask: Number(quote.ap || 0),
+          timestamp,
+          feed: 'iex',
+        }];
+      }));
+      return response({ ok: true, feed: 'iex', quotes, receivedAt: new Date().toISOString() }, 200, origin);
+    }
+
+    if (input.action === 'bars') {
+      const symbol = String(input.symbol || '').toUpperCase();
+      const timeframe = String(input.timeframe || '1Day');
+      const range = String(input.range || '1M');
+      const limit = Math.min(Math.max(Number(input.limit) || 240, 10), 1000);
+      if (!validSymbol(symbol)) return response({ ok: false, error: 'Choose a valid ticker symbol.' }, 400, origin);
+      if (!['1Min', '5Min', '15Min', '1Hour', '1Day'].includes(timeframe)) {
+        return response({ ok: false, error: 'Choose a supported chart interval.' }, 400, origin);
+      }
+      const url = new URL(`https://data.alpaca.markets/v2/stocks/${encodeURIComponent(symbol)}/bars`);
+      url.searchParams.set('timeframe', timeframe);
+      url.searchParams.set('limit', String(limit));
+      url.searchParams.set('feed', 'iex');
+      url.searchParams.set('sort', 'asc');
+      const lookbackDays: Record<string, number> = { '1D': 3, '1W': 10, '1M': 35, '3M': 100, '1Y': 370, '5Y': 1840 };
+      const start = new Date(Date.now() - (lookbackDays[range] || 35) * 86_400_000);
+      url.searchParams.set('start', start.toISOString());
+      const upstream = await fetch(url, { headers, signal: AbortSignal.timeout(12_000) });
+      if (!upstream.ok) return providerError(upstream, origin);
+      const payload = await upstream.json();
+      const bars = (payload.bars || []).map((bar: any) => ({
+        time: Math.floor(new Date(bar.t).getTime() / 1000),
+        open: Number(bar.o),
+        high: Number(bar.h),
+        low: Number(bar.l),
+        close: Number(bar.c),
+        volume: Number(bar.v),
+      })).filter((bar: any) => Number.isFinite(bar.time) && Number.isFinite(bar.close));
+      return response({ ok: true, symbol, timeframe, feed: 'iex', bars, receivedAt: new Date().toISOString() }, 200, origin);
+    }
+
+    return response({ ok: false, error: 'Unknown market-data action.' }, 400, origin);
+  } catch (error) {
+    return response({ ok: false, error: error instanceof Error ? error.message : 'Market data request failed.' }, 502, origin);
+  }
+});
+
+async function providerError(upstream: Response, origin: string) {
+  const raw = await upstream.text();
+  let detail = raw;
+  try {
+    const parsed = JSON.parse(raw);
+    detail = parsed.message || parsed.error || raw;
+  } catch {
+    // Keep the plain provider response for diagnostics.
+  }
+  const status = upstream.status === 401 || upstream.status === 403 ? 502 : upstream.status;
+  return response({ ok: false, error: `Alpaca market data (${upstream.status}): ${detail}` }, status, origin);
+}
