@@ -1,0 +1,1 @@
+{"name":"club-terminal","private":true,"type":"module","scripts":{"dev":"vite --host 127.0.0.1","build":"vite build --base=./"},"dependencies":{"@supabase/supabase-js":"^2.0.0","vite":"^7.0.0"}}
