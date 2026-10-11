@@ -4,7 +4,7 @@ A Bloomberg-inspired, browser-based workspace for a high school finance club. In
 
 ## Local preview
 
-Use Node.js 22 or newer. Run npm ci, then npm run dev. Without configuration, the app is a read-only preview: sample quotes and generated charts are explicitly labeled illustrative. Google sign-in, shared records, manager controls, and the market-data proxy require a configured Supabase project.
+Use Node.js 22 or newer. Run npm ci, then npm run dev. The market screens embed TradingView charts for display; proposal review and shared records require a configured Supabase project.
 
 ## Google sign-in and first manager
 
@@ -27,15 +27,13 @@ The anon/publishable key is intended for public browser use; never put a Supabas
 
 ## Market data
 
-Alpaca Basic is the strongest no-cost candidate found for US stock and ETF quotes. It includes the IEX exchange feed, with historical data available since 2016 but a 15-minute limit on the newest historical window. The app includes a Supabase Edge Function adapter for snapshots and chart bars. Provider credentials stay in Supabase function secrets, and the function requires an authenticated club member.
+TradingView provides free embeddable charts and market widgets for websites. US stock exchange data may be delayed, and coverage varies by market. The app embeds TradingView’s hosted chart for human-readable display only; it does not fetch, store, or process those prices. Do not use TradingView values to set paper fill prices or validate orders. A manager must enter an independent simulated fill price when recording an approved paper trade. The portfolio reports fill-price cost basis, not current market value.
 
-There is a material licensing limit: Alpaca’s customer agreement says not to reproduce or distribute market data without written consent, and its support page says API data cannot be redistributed. A single club API key must not be enabled for a shared feed unless Alpaca confirms in writing that this club display is permitted. The adapter is ready, but leave its Alpaca secrets unset until permission is confirmed. The terminal continues to run in clearly labeled illustrative-data mode.
-
-- [Alpaca Basic plan coverage](https://docs.alpaca.markets/us/docs/about-market-data-api)
-- [Alpaca market-data redistribution guidance](https://alpaca.markets/support/redistribute-alpaca-api)
-
-If Alpaca approves the club use, add ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY as Supabase Edge Function secrets, then deploy supabase/functions/market-data. Never place either provider key in GitHub Actions variables or the browser bundle.
+- [TradingView widget setup](https://www.tradingview.com/widget-docs/getting-started/)
+- [Free markets available to TradingView widgets](https://www.tradingview.com/widget-docs/markets/)
+- [TradingView data FAQ](https://www.tradingview.com/widget-docs/faq/data/)
+- [TradingView terms on display-only use](https://www.tradingview.com/policies/)
 
 ## Paper-account rules
 
-Each member starts with an illustrative $100,000 paper account. Postgres serializes manager fills per account and checks cash before buys and held shares before sells. A proposal can be executed only once, only after manager approval, and every fill is linked to its source proposal. The portfolio uses indicative marks; the leaderboard shows notional participation, not investment returns. No real account, order routing, commissions, slippage, or tax calculations are connected.
+Each member starts with a $100,000 paper account. Postgres serializes manager fills per account and checks cash before buys and held shares before sells. A proposal can be executed only once, only after manager approval, and every fill is linked to its source proposal. The portfolio reports remaining cost basis; the leaderboard shows notional participation, not investment returns. No real account, order routing, commissions, slippage, or tax calculations are connected.

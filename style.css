@@ -107,3 +107,12 @@ footer{border-top:1px solid #484b4b;color:#a4a7a5}
 #proposal-dialog input:focus,#proposal-dialog textarea:focus,#proposal-dialog select:focus,.role-form select:focus{outline:1px solid #ff2a2a}
 ::selection{background:#ff2a2a;color:#fff}
 @media(max-width:760px){.pagehead h1{font-size:2.4rem}.metric-grid{gap:1px}.workspace-grid,.lower-grid{gap:1px}}
+.tv-chart-frame{height:320px;min-width:0;overflow:hidden;border:1px solid #27312f;background:#0c1113}
+.tv-chart-frame.tv-chart-large{height:520px}
+.tv-chart-frame .tradingview-widget-container{height:100%;width:100%}
+.tv-chart-frame iframe{border:0}
+.tradingview-widget-copyright{height:28px;padding:5px 8px;color:#8a9891;font:9px var(--mono);text-align:right}
+.tv-credit,.tv-link{color:var(--lime);text-decoration:none}
+.tv-link{font:9px var(--mono)}
+.tv-credit:hover,.tv-link:hover{text-decoration:underline}
+@media(max-width:760px){.tv-chart-frame{height:280px}.tv-chart-frame.tv-chart-large{height:430px}}
