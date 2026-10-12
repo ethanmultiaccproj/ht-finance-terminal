@@ -188,7 +188,9 @@ function render() {
     // Some browser controls do not expose a text selection.
   }
 
-  chartCleanup();
+  const disposeChart = chartCleanup;
+  chartCleanup = () => {};
+  disposeChart();
   app.innerHTML = renderApplication(state);
 
   if (activeId) {
