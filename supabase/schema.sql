@@ -49,7 +49,7 @@ end $$;
 create or replace function public.list_club_members() returns table(user_id uuid,email text,full_name text,role text,joined_at timestamptz) language plpgsql stable security definer set search_path='' as $$ begin
 if not public.is_manager() then raise exception 'Manager access required'; end if;
 return query
-select u.id,u.email,coalesce(u.raw_user_meta_data->>'full_name',u.raw_user_meta_data->>'name',split_part(u.email,'@',1)),m.role,u.created_at
+select u.id,u.email::text,coalesce(u.raw_user_meta_data->>'full_name',u.raw_user_meta_data->>'name',split_part(u.email,'@',1))::text,m.role::text,u.created_at::timestamptz
 from auth.users u
 left join public.members m on m.id=u.id
 order by (m.role is null),u.created_at desc;

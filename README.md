@@ -27,6 +27,7 @@ npm run build
 - `src/main.js` owns navigation, authentication state, forms, and interactions.
 - `src/views/terminal-pages.js` renders each terminal workspace.
 - `src/components/price-chart.js` draws candles, volume, crosshair values, and optional 20/50-period averages in the app.
+- `src/components/order-book.js` renders the labeled synthetic depth ladder; `src/lib/order-book.js` builds the stable, testable levels.
 - `src/services/market-data.js` calls the Supabase market-data function; `training-market.js` supplies the labeled preview feed.
 - `src/lib/portfolio.js` calculates personal positions, average cost, cash, and realized/unrealized P&L from manager-recorded fills.
 - `supabase/schema.sql` defines the tables, row-level security, and manager-only review/fill/member functions.
@@ -34,24 +35,28 @@ npm run build
 
 ## Supabase and Google sign-in
 
-The app uses Google OAuth through Supabase Auth. In Supabase Auth, set the site URL and redirect allowlist to:
+The app uses Google OAuth through Supabase Auth. Set the Supabase site URL to `https://ht-finance-terminal.vercel.app/` after the Vercel deployment is ready, and allow redirects from both hosts:
 
 ```text
 https://idxtry.github.io/ht-finance-terminal/
 ```
 
+Keep both `https://ht-finance-terminal.vercel.app/**` and `https://idxtry.github.io/ht-finance-terminal/**` in the Supabase redirect allowlist so sign-in works from either host. The Google OAuth web-client redirect URI remains the callback shown in Supabase Auth → Providers → Google.
+
 Set the Google OAuth web-client redirect URI to the callback shown in Supabase Auth → Providers → Google. The Google consent screen may need club members added as test users while it remains in testing mode.
 
 The project tables and role policies are in `supabase/schema.sql`. After the first manager signs in, that account can be promoted once by running `supabase/bootstrap_manager.sql` with the manager's Google email substituted in the SQL. Managers can then activate later sign-ins and assign intern/manager roles from the Members page. Pending accounts cannot read club proposals or trades. The database enforces review and execution permissions independently of the client UI.
 
-## GitHub Pages
+## Hosting
 
-The workflow in `.github/workflows/deploy.yml` builds and deploys `dist/` on a push to `main`. Add these repository Actions variables under Settings → Secrets and variables → Actions → Variables:
+The connected Vercel project builds this repository on pushes to `main` and serves it at `https://ht-finance-terminal.vercel.app/`. The checked-in `.env.production` contains only the public Supabase project URL and browser publishable key used by the static app. Supabase row-level security protects all club data. A publishable/anon key is intended to be visible to browsers; never put a service-role key, Google client secret, or Alpaca secret in Vite variables or this repository.
+
+GitHub Pages remains available as a fallback. Its workflow in `.github/workflows/deploy.yml` builds and deploys `dist/` on a push to `main`. If rebuilding Pages in another fork, add these repository Actions variables under Settings → Secrets and variables → Actions → Variables:
 
 - `VITE_SUPABASE_URL`: the Supabase project URL.
 - `VITE_SUPABASE_ANON_KEY`: the public anon/publishable key.
 
-Then push to `main` or run **Deploy terminal** from Actions. The public anon/publishable key is designed for browser use with row-level security. Never put a Supabase service-role key, Google client secret, or Alpaca secret in Vite variables or this repository.
+Then push to `main` or run **Deploy terminal** from Actions.
 
 ## Optional free market feed
 
@@ -68,9 +73,9 @@ Alternatively, add those same names under Supabase → Edge Functions → Secret
 
 ## Open-source components and references
 
-The chart uses [TradingView Lightweight Charts](https://tradingview.github.io/lightweight-charts/), an Apache-2.0 library, rendered directly in the application. Its license is included at `third-party/lightweight-charts-LICENSE.txt`; the app displays the required TradingView copyright and link. See `THIRD_PARTY_NOTICES.md` for attribution.
+The chart uses [TradingView Lightweight Charts](https://tradingview.github.io/lightweight-charts/), an Apache-2.0 library, rendered directly in the application. Its license is included at `third-party/lightweight-charts-LICENSE.txt`; the app displays the required TradingView copyright and link. The synthetic depth ladder adapts the tested model from [maddoxk/frontend-trading-dashboard](https://github.com/maddoxk/frontend-trading-dashboard), under MIT; its full notice is included in `third-party/frontend-trading-dashboard-LICENSE.txt`.
 
-I also reviewed an [MIT-licensed open-source trading dashboard](https://github.com/maddoxk/frontend-trading-dashboard) for interaction and layout ideas. Its README identifies its market prices as synthetic; this app uses original club-specific implementation and does not copy that repository's code. [Lovable's GitHub guide](https://docs.lovable.dev/integrations/github) documents syncing a project that a user owns with their GitHub repository; it is not a public library of reusable Lovable project source.
+I also reviewed [OpenTerminal](https://github.com/ErTasselli/OpenTerminal), an MIT-licensed desktop terminal with command-driven navigation. Its provider integrations use a mix of public and reverse-engineered endpoints; this app does not copy or rely on those feeds. Lovable's [GitHub guide](https://docs.lovable.dev/integrations/github) documents syncing projects users own, rather than a shared source-code library.
 
 ## Paper-account model
 
