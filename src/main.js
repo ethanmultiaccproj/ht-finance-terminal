@@ -3,6 +3,7 @@ import { DEFAULT_WATCHLIST, cleanSymbol, findInstruments, instrument } from './d
 import { escapeHtml as h, formatMoney, formatTime } from './lib/format.js';
 import { calculatePortfolio } from './lib/portfolio.js';
 import { buildPortfolioHistory } from './lib/portfolio-history.js';
+import { encodeCsv } from './lib/csv.js';
 import { backendConfigured, supabase } from './lib/supabase.js';
 import { loadBars, loadSnapshots, MarketDataError } from './services/market-data.js';
 import { generateTrainingBars, trainingSnapshots } from './services/training-market.js';
@@ -59,6 +60,8 @@ const state = {
   quantResults: null,
   quantBacktest: null,
   quantBars: [],
+  quantHistoryLoading: false,
+  quantHistoryError: '',
   quantHistorySource: 'Training simulation',
   quantHistorySymbol: '',
   pendingCount: 0,
@@ -129,6 +132,8 @@ function changeSelectedSymbol(symbol) {
   state.quantBacktest = null;
   state.quantBars = [];
   state.quantHistorySymbol = '';
+  state.quantHistoryLoading = false;
+  state.quantHistoryError = '';
   state.quantHistorySource = 'Training simulation';
 }
 
@@ -516,6 +521,7 @@ async function refreshMarketData(options = {}) {
   const previousSource = state.market.source;
   marketRequestInFlight = true;
   state.market.loading = true;
+  if (!options.silent) render();
   const symbols = allMarketSymbols();
   if (!backendConfigured) {
     if (state.user) setTrainingMarket(symbols);
@@ -675,12 +681,15 @@ async function loadPortfolioHistory(userId = state.selectedPortfolioUserId || st
   if (state.route === 'portfolio') render();
 }
 
-async function loadQuantHistory() {
+async function loadQuantHistory({ force = false } = {}) {
   const symbol = state.symbol;
-  if (state.quantHistorySymbol === symbol && state.quantBars.length) return;
+  if (!force && state.quantHistorySymbol === symbol && state.quantBars.length) return;
   state.quantHistorySymbol = symbol;
   state.quantHistorySource = 'Training simulation';
   state.quantBars = generateTrainingBars(symbol, 260, '1Day');
+  state.quantHistoryError = '';
+  state.quantHistoryLoading = true;
+  state.quantBacktest = null;
   if (supabase && state.user && hasPermission('market_data.read')) {
     try {
       const result = await loadBars(supabase, symbol, '1Y');
@@ -688,10 +697,12 @@ async function loadQuantHistory() {
       if (state.symbol !== symbol || state.quantHistorySymbol !== symbol) return;
       state.quantBars = result.bars;
       state.quantHistorySource = 'Alpaca IEX';
-    } catch {
-      // Keep the clearly labeled deterministic training series available.
+    } catch (error) {
+      if (state.symbol !== symbol || state.quantHistorySymbol !== symbol) return;
+      state.quantHistoryError = `Historical IEX bars are unavailable for ${symbol}: ${error?.message || 'request failed'}. Training series remains labeled as synthetic.`;
     }
   }
+  state.quantHistoryLoading = false;
   if (state.route === 'quant') render();
 }
 
@@ -1102,7 +1113,7 @@ function exportTrades() {
   for (const trade of state.trades) {
     rows.push([trade.created_at, trade.symbol, trade.side, trade.quantity, trade.price, Number(trade.quantity) * Number(trade.price), memberLabel(trade.author_id), memberLabel(trade.executed_by), trade.proposal_id]);
   }
-  const csv = rows.map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\r\n');
+  const csv = encodeCsv(rows);
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   const link = document.createElement('a');
   link.href = url;
@@ -1142,6 +1153,7 @@ function onAppClick(event) {
       break;
     case 'toggle-indicator': state[indicator] = !state[indicator]; render(); break;
     case 'retry-data': void refreshMarketData(); break;
+    case 'retry-quant-history': void loadQuantHistory({ force: true }); break;
     case 'export-trades': exportTrades(); break;
     case 'clear-trade-filters': state.tradeSearch = ''; state.tradeFilterSide = 'all'; state.tradeSort = 'newest'; render(); break;
     case 'bootstrap-owner': void bootstrapOwner(); break;

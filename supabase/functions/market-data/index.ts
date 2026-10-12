@@ -1,12 +1,14 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { withSupabase } from 'npm:@supabase/server@1';
 import {
-  createGuestRateLimiter,
+  hashMarketClientKey,
   getSupabaseClientKeys,
   GUEST_MARKET_LIMITS,
   isPublicMarketSymbol,
   isPublicSupabaseToken,
   selectMarketBars,
 } from '../_shared/market-access.js';
+import { marketBarsCacheKey, marketSnapshotCacheKey } from '../_shared/market-cache.js';
 
 const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -23,7 +25,7 @@ const allowedOrigins = new Set([
   'http://localhost:5173',
 ]);
 const maxBodyBytes = 8 * 1024;
-const allowGuestRequest = createGuestRateLimiter();
+const globalMarketRequestsPerMinute = 180;
 
 function isAllowedOrigin(origin: string) {
   if (allowedOrigins.has(origin)) return true;
@@ -71,7 +73,7 @@ function validSymbol(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Z][A-Z0-9.-]{0,11}$/.test(value);
 }
 
-Deno.serve(async (request) => {
+Deno.serve(withSupabase({ auth: 'none' }, async (request, context) => {
   const origin = request.headers.get('Origin') || '';
   if (!isAllowedOrigin(origin)) {
     return new Response('Origin not allowed', { status: 403 });
@@ -113,16 +115,35 @@ Deno.serve(async (request) => {
     hasMemberMarketAccess = !permissionError && mayReadMarket === true;
   }
   const isPublicViewer = !hasMemberMarketAccess;
-  if (isPublicViewer) {
-    const clientIp = request.headers.get('cf-connecting-ip') || request.headers.get('x-real-ip') || 'unknown';
-    if (!allowGuestRequest(clientIp)) {
+  const guestClientHash = isPublicViewer
+    ? await hashMarketClientKey(request.headers.get('cf-connecting-ip') || 'unknown')
+    : null;
+  const requestMarketBudget = async (cost: number) => {
+    try {
+      const { data, error } = await context.supabaseAdmin.rpc('consume_market_request_budget', {
+        p_client_hash: guestClientHash,
+        p_is_guest: isPublicViewer,
+        p_cost: cost,
+        p_client_limit: GUEST_MARKET_LIMITS.requestsPerMinute,
+        p_global_limit: globalMarketRequestsPerMinute,
+      });
+      if (error) throw error;
+      if (data === true) return null;
       return response({
         ok: false,
         code: 'RATE_LIMITED',
-        error: 'Guest market-data limit reached. Wait a minute and try again.',
+        error: isPublicViewer
+          ? 'Guest market-data limit reached. Wait a minute and try again.'
+          : 'Shared market-data capacity is busy. Wait a minute and try again.',
       }, 429, origin, { 'Retry-After': '60' });
+    } catch {
+      return response({
+        ok: false,
+        code: 'MARKET_BUDGET_UNAVAILABLE',
+        error: 'Shared market-data request protection is unavailable. Try again later.',
+      }, 503, origin);
     }
-  }
+  };
 
   const keyId = Deno.env.get('ALPACA_API_KEY_ID');
   const keySecret = Deno.env.get('ALPACA_API_SECRET_KEY');
@@ -154,7 +175,7 @@ Deno.serve(async (request) => {
       if (!symbols.length || symbols.length > maxSymbols || !symbols.every(validSymbol)) {
         return response({ ok: false, error: `Choose between 1 and ${maxSymbols} valid US stock or ETF symbols.` }, 400, origin);
       }
-      const unavailableSymbols = isPublicViewer ? symbols.filter((symbol) => !isPublicMarketSymbol(symbol)) : [];
+      const unavailableSymbols: string[] = isPublicViewer ? symbols.filter((symbol) => !isPublicMarketSymbol(symbol)) : [];
       const requestedSymbols = isPublicViewer ? symbols.filter(isPublicMarketSymbol) : symbols;
       if (!requestedSymbols.length) {
         return response({
@@ -166,9 +187,21 @@ Deno.serve(async (request) => {
           receivedAt: new Date().toISOString(),
         }, 200, origin);
       }
-      const cacheKey = `snapshots:${requestedSymbols.sort().join(',')}`;
+      const cacheKey = marketSnapshotCacheKey({
+        symbols: requestedSymbols,
+        unavailableSymbols,
+        viewer: isPublicViewer ? 'guest' : 'member',
+      });
       const cached = cachedResponse(cacheKey, 15_000, origin);
-      if (cached) return cached;
+      if (cached) {
+        if (isPublicViewer) {
+          const budgetError = await requestMarketBudget(0);
+          if (budgetError) return budgetError;
+        }
+        return cached;
+      }
+      const budgetError = await requestMarketBudget(2);
+      if (budgetError) return budgetError;
       const url = new URL('https://data.alpaca.markets/v2/stocks/snapshots');
       url.searchParams.set('symbols', requestedSymbols.join(','));
       url.searchParams.set('feed', 'iex');
@@ -245,9 +278,24 @@ Deno.serve(async (request) => {
       }
       const lookbackDays: Record<string, number> = { '1D': 3, '1W': 10, '1M': 35, '3M': 100, '1Y': 370, '5Y': 1840 };
       if (!(range in lookbackDays)) return response({ ok: false, error: 'Choose a supported chart range.' }, 400, origin);
-      const cacheKey = `bars:${symbol}:${timeframe}:${range}:${limit}`;
+      const newestFirst = isPublicViewer || range === '5Y';
+      const maximumBars = range === '5Y' && timeframe === '1Day' && !isPublicViewer ? 1_500 : limit;
+      const cacheKey = marketBarsCacheKey({
+        symbol,
+        timeframe,
+        range,
+        limit,
+        maximumBars,
+        viewer: isPublicViewer ? 'guest' : 'member',
+      });
       const cached = cachedResponse(cacheKey, 60_000, origin);
-      if (cached) return cached;
+      if (cached) {
+        if (isPublicViewer) {
+          const budgetError = await requestMarketBudget(0);
+          if (budgetError) return budgetError;
+        }
+        return cached;
+      }
       const url = new URL(`https://data.alpaca.markets/v2/stocks/${encodeURIComponent(symbol)}/bars`);
       url.searchParams.set('timeframe', timeframe);
       url.searchParams.set('limit', String(limit));
@@ -255,14 +303,14 @@ Deno.serve(async (request) => {
       // Long ranges are capped at 1,000 bars. Request the newest bars first so
       // five-year portfolio history reaches the current market period, then
       // restore chronological order for charts and portfolio calculations.
-      const newestFirst = isPublicViewer || range === '5Y';
       url.searchParams.set('sort', newestFirst ? 'desc' : 'asc');
       const start = new Date(Date.now() - (lookbackDays[range] || 35) * 86_400_000);
       url.searchParams.set('start', start.toISOString());
-      const maximumBars = range === '5Y' && timeframe === '1Day' && !isPublicViewer ? 1_500 : limit;
       const rawBars: any[] = [];
       let pageToken: string | null = null;
       for (let page = 0; page < 3 && rawBars.length < maximumBars; page += 1) {
+        const budgetError = await requestMarketBudget(1);
+        if (budgetError) return budgetError;
         const pageUrl = new URL(url);
         if (pageToken) pageUrl.searchParams.set('page_token', pageToken);
         const upstream = await fetch(pageUrl, { headers, signal: AbortSignal.timeout(12_000) });
@@ -309,7 +357,7 @@ Deno.serve(async (request) => {
       error: 'The shared Alpaca IEX service is temporarily unavailable. Try again shortly.',
     }, 502, origin);
   }
-});
+}));
 
 async function providerError(upstream: Response, origin: string) {
   const status = upstream.status === 401 || upstream.status === 403 ? 502 : upstream.status;
