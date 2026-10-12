@@ -90,7 +90,10 @@ export function mountPriceChart(container, bars, options = {}) {
   });
   resizeObserver.observe(container);
 
+  let disposed = false;
   return () => {
+    if (disposed) return;
+    disposed = true;
     resizeObserver.disconnect();
     chart.unsubscribeCrosshairMove(onCrosshairMove);
     chart.remove();
