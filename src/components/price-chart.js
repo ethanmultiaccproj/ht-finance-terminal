@@ -15,20 +15,20 @@ export function mountPriceChart(container, bars, options = {}) {
   const chart = createChart(container, {
     autoSize: true,
     layout: {
-      background: { type: 'solid', color: '#101315' },
-      textColor: '#8e979c',
-      fontFamily: 'IBM Plex Mono, ui-monospace, monospace',
+      background: { type: 'solid', color: '#000000' },
+      textColor: '#fb8b1e',
+      fontFamily: 'Roboto Mono, IBM Plex Mono, ui-monospace, monospace',
       fontSize: 10,
       attributionLogo: false,
     },
     grid: {
-      vertLines: { color: '#1d2428' },
-      horzLines: { color: '#1d2428' },
+      vertLines: { color: '#1c1c1c', style: 2 },
+      horzLines: { color: '#1c1c1c', style: 2 },
     },
-    crosshair: { mode: 1, vertLine: { color: '#8c9ba4', labelBackgroundColor: '#38434a' }, horzLine: { color: '#8c9ba4', labelBackgroundColor: '#38434a' } },
-    rightPriceScale: { borderColor: '#273036', scaleMargins: { top: 0.08, bottom: 0.27 } },
+    crosshair: { mode: 1, vertLine: { color: '#bfbfbf', labelBackgroundColor: '#fb8b1e' }, horzLine: { color: '#bfbfbf', labelBackgroundColor: '#fb8b1e' } },
+    rightPriceScale: { borderColor: '#3a3a3a', scaleMargins: { top: 0.08, bottom: 0.27 } },
     timeScale: {
-      borderColor: '#273036',
+      borderColor: '#3a3a3a',
       timeVisible: ['1D', '1W', '2W'].includes(options.range),
       secondsVisible: false,
       rightOffset: ['5Y', 'ALL'].includes(options.range) ? 0 : 5,
@@ -43,19 +43,19 @@ export function mountPriceChart(container, bars, options = {}) {
   const history = chartHistoryForRange(bars, options.range);
   const candles = history.visibleBars;
   const candleSeries = chart.addSeries(CandlestickSeries, {
-    upColor: '#48c6a1',
-    downColor: '#ef7568',
-    borderUpColor: '#48c6a1',
-    borderDownColor: '#ef7568',
-    wickUpColor: '#48c6a1',
-    wickDownColor: '#ef7568',
+    upColor: '#20d36a',
+    downColor: '#ff433d',
+    borderUpColor: '#20d36a',
+    borderDownColor: '#ff433d',
+    wickUpColor: '#20d36a',
+    wickDownColor: '#ff433d',
   });
   candleSeries.setData(candles);
 
   const volumeSeries = chart.addSeries(HistogramSeries, {
     priceFormat: { type: 'volume' },
     priceScaleId: 'volume',
-    color: '#456373',
+    color: '#3d5a80',
     lastValueVisible: false,
     priceLineVisible: false,
   });
@@ -63,7 +63,7 @@ export function mountPriceChart(container, bars, options = {}) {
   volumeSeries.setData(candles.filter((bar) => Number.isFinite(bar.volume) && bar.volume >= 0).map((bar) => ({
     time: bar.time,
     value: bar.volume,
-    color: bar.close >= bar.open ? '#48c6a144' : '#ef756844',
+    color: bar.close >= bar.open ? '#20d36a44' : '#ff433d44',
   })));
 
   let movingAverage20 = null;
@@ -71,19 +71,19 @@ export function mountPriceChart(container, bars, options = {}) {
   let movingAverage200 = null;
   if (options.showSma20) {
     movingAverage20 = chart.addSeries(LineSeries, {
-      color: '#e3b45c', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      color: '#ffd400', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
     });
     movingAverage20.setData(chartMovingAverage(history, 20));
   }
   if (options.showSma50) {
     movingAverage50 = chart.addSeries(LineSeries, {
-      color: '#78a8d1', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      color: '#5f9cff', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
     });
     movingAverage50.setData(chartMovingAverage(history, 50));
   }
   if (options.showSma200) {
     movingAverage200 = chart.addSeries(LineSeries, {
-      color: '#bd8bd3', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      color: '#e05cff', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
     });
     movingAverage200.setData(chartMovingAverage(history, 200));
   }

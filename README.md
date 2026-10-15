@@ -29,6 +29,7 @@ Configure Supabase Auth’s Site URL and redirect allow-list for the production 
 
 ```text
 https://ht-finance-terminal.vercel.app/**
+https://hterm.hthsfinance.org/**
 https://idxtry.github.io/ht-finance-terminal/**
 ```
 
@@ -69,6 +70,8 @@ The app is a student paper-trading workspace, not a brokerage. It does not yet p
 ## Hosting
 
 The connected Vercel project is `https://ht-finance-terminal.vercel.app/`. GitHub Pages remains available at `https://idxtry.github.io/ht-finance-terminal/`; `.github/workflows/deploy.yml` builds `dist/` after a push to `main`. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as GitHub Actions variables when rebuilding Pages. `.env.production` currently contains only the public Supabase URL and publishable key.
+
+Pages use path URLs (`/markets?symbol=SPY`, `/proposals`) rather than `#` fragments. `vercel.json` rewrites every non-file path to `index.html`, and the Pages workflow copies `index.html` to `404.html` for the same reason. Old `#markets`-style links are redirected to the matching path on load.
 
 ## Source layout and open source
 

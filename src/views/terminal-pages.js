@@ -50,48 +50,47 @@ export function renderApplication(state) {
   const marketLabel = state.market.source === 'iex' ? 'Shared Alpaca IEX' : 'Market data unavailable';
   const marketClass = state.market.source === 'iex' ? 'feed-live' : 'feed-offline';
 
+  const navItems = [...NAV, ...(can(state, 'quant.experiments.run') ? [['quant', 'Quant Lab', 'QL']] : []), ...(can(state, 'members.manage') ? [['admin', 'People & Teams', 'PT']] : [])];
+  const activeCode = navItems.find(([route]) => route === state.route)?.[2] || 'OV';
+
   return `
     <a class="skip-link" href="#main-content">Skip to terminal</a>
     <div class="terminal-shell">
-      <aside class="sidebar" aria-label="Primary navigation">
-        <a class="brand" href="#overview" aria-label="HT Investment Club terminal home">
+      <header class="terminal-titlebar">
+        <a class="brand" href="./" aria-label="HT Investment Club terminal home">
           <span class="brand-mark">HT</span>
-          <span class="brand-copy"><b>HT / FINANCE CLUB</b><small>INVESTMENT DESK</small></span>
+          <span class="brand-copy"><b>HT FINANCE CLUB</b><small>TERMINAL</small></span>
         </a>
-        <div class="sidebar-section-title">DESK</div>
-        <nav class="nav-list">
-          ${[...NAV, ...(can(state, 'quant.experiments.run') ? [['quant', 'Quant Lab', 'QL']] : []), ...(can(state, 'members.manage') ? [['admin', 'People & Teams', 'PT']] : [])].map(([route, label, glyph]) => `
-            <a class="nav-link ${state.route === route ? 'is-active' : ''}" href="#${route}" aria-current="${state.route === route ? 'page' : 'false'}">
-              <span class="nav-code">${glyph}</span><span>${label}</span>${route === 'proposals' && state.pendingCount ? `<i class="nav-count">${state.pendingCount}</i>` : ''}
-            </a>`).join('')}
-        </nav>
-        <div class="sidebar-bottom">
-          <div class="connection-card">
-            <div class="connection-title"><span class="feed-dot ${marketClass}"></span><b>${marketLabel}</b></div>
-            <p>${state.market.source === 'iex' ? 'IEX exchange prices and volume · not consolidated US data' : 'No verified quotes · no substitute data is shown'}</p>
-          </div>
-          <div class="user-card">
+        <div class="crumb"><span>1-HTFC</span><b>›</b><span>${h(pageTitle(state.route).toUpperCase())}</span></div>
+        <div class="topbar-actions">
+          <span class="connection-title" title="${state.market.source === 'iex' ? 'IEX exchange prices and volume · not consolidated US data' : 'No verified quotes · no substitute data is shown'}"><span class="feed-dot ${marketClass}"></span><b>${marketLabel}</b></span>
+          <span class="market-clock"><i class="clock-dot"></i> NY ${h(state.clock || '—')}</span>
+          <span class="user-card">
             <span class="avatar">${h(initials)}</span>
-            <span class="user-info"><b>${h(userName)}</b><small>${h(roleName)}${state.teamName ? ` · ${h(state.teamName)}` : ''}</small></span>
-            ${state.user ? '<button class="signout-button" type="button" data-action="signout" aria-label="Sign out">↗</button>' : '<button class="signout-button" type="button" data-action="signin" aria-label="Sign in">↗</button>'}
-          </div>
+            <span class="user-info"><b>${h(userName)}</b><small class="top-role role-${h(state.role)}">${h(roleName)}${state.teamName ? ` · ${h(state.teamName)}` : ''}</small></span>
+          </span>
+          ${state.user ? '<button class="button compact signout-button" type="button" data-action="signout">Log off</button>' : '<button class="button compact button-accent" type="button" data-action="signin">Sign in</button>'}
         </div>
-      </aside>
+      </header>
+      <div class="command-bar">
+        <form class="command-search" id="command-search" autocomplete="off" role="search">
+          <span class="command-prefix">${h(state.symbol || '')} <small>US</small></span>
+          <input id="command-input" name="query" type="search" placeholder="Type a ticker or company name, then press GO" aria-label="Find a company or ticker" aria-controls="search-results" aria-expanded="${state.searchOpen}">
+          <kbd>⌘K</kbd>
+          <button class="go-key" type="submit">GO</button>
+          ${state.searchOpen ? renderSearchResults(state.searchQuery) : ''}
+        </form>
+        <span class="command-function">${h(activeCode)} &lt;GO&gt;</span>
+      </div>
+      <nav class="sidebar nav-list" aria-label="Primary navigation">
+        ${navItems.map(([route, label, glyph]) => `
+          <a class="nav-link ${state.route === route ? 'is-active' : ''}" href="${route === 'overview' ? './' : route}" aria-current="${state.route === route ? 'page' : 'false'}">
+            <span class="nav-code">${glyph}</span><span>${label}</span>${route === 'proposals' && state.pendingCount ? `<i class="nav-count">${state.pendingCount}</i>` : ''}
+          </a>`).join('')}
+      </nav>
+      ${tickerTape(state)}
 
       <main class="terminal-main" id="main-content">
-        <header class="terminal-topbar">
-          <div class="crumb"><span>HTFC</span><b>/</b><span>${h(pageTitle(state.route).toUpperCase())}</span></div>
-          <form class="command-search" id="command-search" autocomplete="off" role="search">
-            <span class="command-prefix">⌕</span>
-            <input id="command-input" name="query" type="search" placeholder="Find a company or ticker" aria-label="Find a company or ticker" aria-controls="search-results" aria-expanded="${state.searchOpen}">
-            <kbd>⌘ K</kbd>
-            ${state.searchOpen ? renderSearchResults(state.searchQuery) : ''}
-          </form>
-          <div class="topbar-actions">
-            <span class="market-clock"><i class="clock-dot"></i> NY ${h(state.clock || '—')}</span>
-            ${state.user ? `<span class="top-role role-${h(state.role)}">${h(roleName)}</span>` : '<button class="button compact" type="button" data-action="signin">Sign in</button>'}
-          </div>
-        </header>
         <div class="page-area">
           ${state.notice ? `<div class="notice notice-${h(state.notice.type || 'info')}" role="status"><span>${h(state.notice.message)}</span><button data-action="dismiss-notice" aria-label="Dismiss message">×</button></div>` : ''}
           ${state.loadError ? `<div class="notice notice-error" role="alert"><span>${h(state.loadError)}</span><button data-action="retry-data">Retry</button></div>` : ''}
@@ -108,6 +107,16 @@ export function renderApplication(state) {
     ${renderProposalDialog(state)}
     ${renderAuthDialog(state)}
   `;
+}
+
+const TAPE_SYMBOLS = ['SPY', 'QQQ', 'DIA', 'IWM', 'TLT', 'GLD'];
+
+function tickerTape(state) {
+  return `<div class="ticker-tape" aria-label="Market monitor">${TAPE_SYMBOLS.map((symbol) => {
+    const quote = quoteFor(state, symbol);
+    const hasChange = quote?.change != null && quote?.changePercent != null;
+    return `<button type="button" class="tape-item" data-action="open-symbol" data-symbol="${h(symbol)}"><b>${h(symbol)}</b><span>${quote ? formatMoney(quote.price) : '—'}</span><i class="${classForChange(quote?.change ?? null)}">${hasChange ? `${quote.change > 0 ? '▲' : quote.change < 0 ? '▼' : ''}${Math.abs(Number(quote.changePercent)).toFixed(2)}%` : '—'}</i></button>`;
+  }).join('')}</div>`;
 }
 
 function renderPage(state) {
@@ -207,7 +216,7 @@ function overviewPage(state) {
     </section>
     <div class="overview-grid">
       <section class="panel watch-panel">
-        <div class="panel-heading"><div><div class="eyebrow">COVERAGE / ${state.watchlist.length.toString().padStart(2, '0')} NAMES</div><h2>Watchlist</h2></div><a class="inline-link" href="#markets">Open markets ↗</a></div>
+        <div class="panel-heading"><div><div class="eyebrow">COVERAGE / ${state.watchlist.length.toString().padStart(2, '0')} NAMES</div><h2>Watchlist</h2></div><a class="inline-link" href="markets">Open markets ↗</a></div>
         ${watchlistTable(state)}
       </section>
       <section class="panel pulse-panel">
@@ -218,11 +227,11 @@ function overviewPage(state) {
         ${state.user && state.role === 'pending' ? `<div class="inline-callout"><b>Activation required</b><span>Ask the club Owner to assign your role.</span></div>` : ''}
       </section>
       <section class="panel recent-panel">
-        <div class="panel-heading"><div><div class="eyebrow">LATEST RESEARCH / ${state.proposals.length}</div><h2>Proposal flow</h2></div><a class="inline-link" href="#proposals">Review all ↗</a></div>
+        <div class="panel-heading"><div><div class="eyebrow">LATEST RESEARCH / ${state.proposals.length}</div><h2>Proposal flow</h2></div><a class="inline-link" href="proposals">Review all ↗</a></div>
         ${state.proposals.length ? `<div class="proposal-list">${state.proposals.slice(0, 5).map((proposal) => compactProposal(proposal)).join('')}</div>` : `<div class="table-empty"><b>No shared proposals yet.</b><span>Write a thesis with a clear catalyst and the risks that would invalidate it.</span>${can(state, 'proposals.create') ? '<button class="text-action" type="button" data-action="open-proposal">Draft first thesis ↗</button>' : ''}</div>`}
       </section>
       <section class="panel ledger-panel">
-        <div class="panel-heading"><div><div class="eyebrow">EXECUTION JOURNAL / ${state.trades.length}</div><h2>Recent paper fills</h2></div><a class="inline-link" href="#activity">Open ledger ↗</a></div>
+        <div class="panel-heading"><div><div class="eyebrow">EXECUTION JOURNAL / ${state.trades.length}</div><h2>Recent paper fills</h2></div><a class="inline-link" href="activity">Open ledger ↗</a></div>
         ${activity.length ? `<div class="ledger-list">${activity.map((trade) => compactTrade(state, trade)).join('')}</div>` : `<div class="table-empty"><b>The execution journal is clear.</b><span>Paper fills appear after a manager approves and records a proposal.</span></div>`}
       </section>
     </div>
@@ -248,7 +257,7 @@ function marketsPage(state) {
     : null;
   const isWatched = state.watchlist.includes(state.symbol);
   return `
-    ${heading('UNITED STATES', 'Markets', '', `<div class="market-heading-actions"><form class="symbol-entry" id="market-search"><span>LOOKUP</span><input name="symbol" value="${h(state.symbol)}" maxlength="12" aria-label="Ticker symbol" autocomplete="off"><button class="button button-accent">Go <span>↵</span></button></form><a class="button" href="#research?symbol=${encodeURIComponent(state.symbol)}">Research ${h(state.symbol)} ↗</a>${marketRefreshButton(state)}</div>`)}
+    ${heading('UNITED STATES', 'Markets', '', `<div class="market-heading-actions"><form class="symbol-entry" id="market-search"><span>LOOKUP</span><input name="symbol" value="${h(state.symbol)}" maxlength="12" aria-label="Ticker symbol" autocomplete="off"><button class="button button-accent">Go <span>↵</span></button></form><a class="button" href="research?symbol=${encodeURIComponent(state.symbol)}">Research ${h(state.symbol)} ↗</a>${marketRefreshButton(state)}</div>`)}
     ${marketDataNotice(state)}
     <section class="quote-header">
       <div class="quote-identity"><span class="exchange-code">${h(item.exchange)}</span><h2>${h(state.symbol)}</h2><p>${h(item.name)} <i>·</i> ${h(item.sector)}</p></div>
@@ -282,7 +291,7 @@ function researchPage(state) {
   const analyses = (state.quantAnalyses || []).filter((analysis) => linkedProposalIds.has(analysis.proposal_id));
   const researchForm = `<div class="market-heading-actions"><form class="symbol-entry" id="market-search"><span>LOOKUP</span><input name="symbol" value="${h(state.symbol)}" maxlength="12" aria-label="Ticker symbol" autocomplete="off"><button class="button button-accent">Go <span>↵</span></button></form>${marketRefreshButton(state)}</div>`;
   const proposalRows = linkedProposals.length
-    ? linkedProposals.slice(0, 5).map((proposal) => `<article class="research-proposal-row"><div><b>${h(proposal.side.toUpperCase())} ${h(proposal.symbol)}</b><small>${h(memberName(state, proposal.author_id))} · ${h(relativeTime(proposal.created_at))}</small></div><span class="status-tag status-${h(proposal.status)}">${h(proposal.status)}</span><a class="inline-link" href="#proposals">Open ↗</a></article>`).join('')
+    ? linkedProposals.slice(0, 5).map((proposal) => `<article class="research-proposal-row"><div><b>${h(proposal.side.toUpperCase())} ${h(proposal.symbol)}</b><small>${h(memberName(state, proposal.author_id))} · ${h(relativeTime(proposal.created_at))}</small></div><span class="status-tag status-${h(proposal.status)}">${h(proposal.status)}</span><a class="inline-link" href="proposals">Open ↗</a></article>`).join('')
     : `<div class="table-empty"><b>No club proposals for ${h(state.symbol)}.</b><span>${state.user ? 'Submitted theses linked to this security will appear here.' : 'Sign in to access club research and proposal history.'}</span>${can(state, 'proposals.create') ? `<button class="text-action" type="button" data-action="open-proposal" data-symbol="${h(state.symbol)}">＋ Propose ${h(state.symbol)}</button>` : ''}</div>`;
   const quantRows = analyses.length
     ? analyses.slice(0, 4).map((analysis) => `<article class="research-quant-row"><div><b>${h(titleCase(analysis.recommendation))}</b><small>${h(memberName(state, analysis.analyst_id))} · ${h(formatTime(analysis.created_at))}</small></div><p>${h(analysis.summary)}</p></article>`).join('')
@@ -293,7 +302,7 @@ function researchPage(state) {
     <section class="quote-header research-quote-header">
       <div class="quote-identity"><span class="exchange-code">${h(item.exchange)}</span><h2>${h(state.symbol)}</h2><p>${h(item.name)} <i>·</i> ${h(item.sector)}</p></div>
       <div class="quote-price-block"><strong>${quote ? formatMoney(quote.price, { digits: quote.price < 2 ? 4 : 2 }) : '—'}</strong><span class="${classForChange(quote?.change ?? null)}">${quote?.change != null && quote?.changePercent != null ? `${formatSignedMoney(quote.change)} (${formatPercent(quote.changePercent)})` : quote ? 'Change unavailable' : 'Awaiting verified quote'}</span><small>${quoteTimestampLabel(state, quote)} · ${state.market.marketClock ? `MARKET ${state.market.marketClock.isOpen ? 'OPEN' : 'CLOSED'}` : 'SESSION UNKNOWN'}</small></div>
-      <div class="quote-actions">${marketStatus(state)}<a class="button" href="#markets?symbol=${encodeURIComponent(state.symbol)}">Open chart & tape ↗</a>${can(state, 'proposals.create') ? `<button class="button button-accent" type="button" data-action="open-proposal" data-symbol="${h(state.symbol)}">＋ New proposal</button>` : ''}</div>
+      <div class="quote-actions">${marketStatus(state)}<a class="button" href="markets?symbol=${encodeURIComponent(state.symbol)}">Open chart & tape ↗</a>${can(state, 'proposals.create') ? `<button class="button button-accent" type="button" data-action="open-proposal" data-symbol="${h(state.symbol)}">＋ New proposal</button>` : ''}</div>
     </section>
     <div class="research-grid">
       <section class="panel research-profile"><div class="panel-heading"><div><div class="eyebrow">INSTRUMENT PROFILE</div><h2>${h(item.name)}</h2></div><span class="quiet-count">${h(item.symbol)}</span></div>
@@ -301,8 +310,8 @@ function researchPage(state) {
         <div class="research-range-grid">${detailRow('Open', quote?.open)}${detailRow('Previous close', quote?.previousClose)}${detailRow('Day high', quote?.high)}${detailRow('Day low', quote?.low)}${detailRow('Volume', quote?.volume, true)}${detailRow('Bid', quote?.bid)}${detailRow('Ask', quote?.ask)}</div>
         <p class="research-disclosure">Fundamental statements and analyst estimates are not connected. This profile shows instrument metadata and verified market-feed fields only.</p>
       </section>
-      <section class="panel research-proposals"><div class="panel-heading"><div><div class="eyebrow">CLUB IDEAS / ${linkedProposals.length}</div><h2>Proposal activity</h2></div><a class="inline-link" href="#proposals">All proposals ↗</a></div>${proposalRows}</section>
-      <section class="panel research-quant"><div class="panel-heading"><div><div class="eyebrow">QUANT REVIEW / ${analyses.length}</div><h2>Quant findings</h2></div><a class="inline-link" href="#quant">Quant Lab ↗</a></div>${quantRows}</section>
+      <section class="panel research-proposals"><div class="panel-heading"><div><div class="eyebrow">CLUB IDEAS / ${linkedProposals.length}</div><h2>Proposal activity</h2></div><a class="inline-link" href="proposals">All proposals ↗</a></div>${proposalRows}</section>
+      <section class="panel research-quant"><div class="panel-heading"><div><div class="eyebrow">QUANT REVIEW / ${analyses.length}</div><h2>Quant findings</h2></div><a class="inline-link" href="quant">Quant Lab ↗</a></div>${quantRows}</section>
     </div>
   `;
 }
@@ -410,7 +419,7 @@ function portfolioPage(state) {
     ? `${formatSignedMoney(totalPnl)} total simulated P/L`
     : `Current quote unavailable: ${unpricedSymbols.join(', ') || 'open position'}`;
   return `
-    ${heading(canViewAssigned ? 'ASSIGNED INTERN BOOKS / PAPER LEDGER' : 'SIMULATED BOOK / MARKED TO SELECTED FEED', 'Portfolio', canViewAssigned ? 'Assigned intern accounts derived from approved paper fills, marked against the visible feed.' : 'Average-cost holdings from approved manager-recorded paper fills. Marks use the visible feed.', `${accountSelector}<a class="button" href="#activity">Open trade ledger ↗</a>`)}
+    ${heading(canViewAssigned ? 'ASSIGNED INTERN BOOKS / PAPER LEDGER' : 'SIMULATED BOOK / MARKED TO SELECTED FEED', 'Portfolio', canViewAssigned ? 'Assigned intern accounts derived from approved paper fills, marked against the visible feed.' : 'Average-cost holdings from approved manager-recorded paper fills. Marks use the visible feed.', `${accountSelector}<a class="button" href="activity">Open trade ledger ↗</a>`)}
     <div class="portfolio-summary">
       ${summaryMetric(canViewAssigned ? 'Assigned paper equity' : 'Paper equity', formatAvailableMoney(equityTotal), valuationNote, classForChange(totalPnl))}
       ${summaryMetric('Available cash', formatMoney(cashTotal), 'Starting cash less buys, plus sells', '')}
@@ -420,7 +429,7 @@ function portfolioPage(state) {
     ${portfolioHistoryPanel(state, portfolioUserId, selectedAccountName)}
     ${canViewAssigned ? `<section class="panel assigned-books"><div class="panel-heading"><div><div class="eyebrow">PORTFOLIO COVERAGE / ${books.length} ACCOUNTS</div><h2>Assigned intern books</h2></div><span class="quiet-count">${h(coverageName)}</span></div>${books.length ? `<div class="table-frame"><table class="data-table"><thead><tr><th>Intern / account</th><th>Team</th><th>Equity</th><th>Cash</th><th>Market value</th><th>Total P/L</th></tr></thead><tbody>${books.map(({member,portfolio}) => `<tr><td>${h(member.full_name || member.email || 'Club member')}</td><td>${h(member.team || '—')}</td><td class="numeric">${formatAvailableMoney(portfolio.equity)}</td><td class="numeric">${formatMoney(portfolio.cash)}</td><td class="numeric">${formatAvailableMoney(portfolio.marketValue)}</td><td class="numeric ${classForChange(portfolio.totalPnl)}">${formatAvailableSignedMoney(portfolio.totalPnl)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="table-empty"><b>No Intern portfolios are assigned to this view.</b><span>Assign teams in People & Teams.</span></div>'}</section>` : ''}
     <section class="panel positions-panel"><div class="panel-heading"><div><div class="eyebrow">LONG POSITIONS / AVERAGE COST</div><h2>Holdings</h2></div><span class="quiet-count">${priced} of ${allPositions.length} marked ${state.market.source === 'iex' ? 'from IEX' : 'with verified quotes'}</span></div>
-      ${allPositions.length ? `<div class="table-frame"><table class="data-table positions-table"><thead><tr>${canViewAssigned ? '<th>Intern</th>' : ''}<th>Security</th><th>Shares</th><th>Avg. cost</th><th>Mark</th><th>Market value</th><th>Unrealized P/L</th></tr></thead><tbody>${allPositions.map((position) => `<tr>${canViewAssigned ? `<td>${h(position.ownerName)}</td>` : ''}<td><button class="instrument-select" type="button" data-action="open-symbol" data-symbol="${h(position.symbol)}"><b>${h(position.symbol)}</b><span>${h(instrument(position.symbol).name)}</span></button></td><td class="numeric">${formatNumber(position.shares, 4)}</td><td class="numeric">${formatMoney(position.averageCost)}</td><td class="numeric">${formatAvailableMoney(position.mark)}</td><td class="numeric">${formatAvailableMoney(position.marketValue)}</td><td class="numeric ${classForChange(position.unrealizedPnl)}">${formatAvailableSignedMoney(position.unrealizedPnl)}</td></tr>`).join('')}</tbody></table></div>` : `<div class="table-empty"><b>${canViewAssigned ? 'No assigned holdings yet.' : 'No holdings yet.'}</b><span>Propose an idea, wait for manager approval, then the manager records the paper fill.</span><a class="text-action" href="#proposals">Open Proposals ↗</a></div>`}
+      ${allPositions.length ? `<div class="table-frame"><table class="data-table positions-table"><thead><tr>${canViewAssigned ? '<th>Intern</th>' : ''}<th>Security</th><th>Shares</th><th>Avg. cost</th><th>Mark</th><th>Market value</th><th>Unrealized P/L</th></tr></thead><tbody>${allPositions.map((position) => `<tr>${canViewAssigned ? `<td>${h(position.ownerName)}</td>` : ''}<td><button class="instrument-select" type="button" data-action="open-symbol" data-symbol="${h(position.symbol)}"><b>${h(position.symbol)}</b><span>${h(instrument(position.symbol).name)}</span></button></td><td class="numeric">${formatNumber(position.shares, 4)}</td><td class="numeric">${formatMoney(position.averageCost)}</td><td class="numeric">${formatAvailableMoney(position.mark)}</td><td class="numeric">${formatAvailableMoney(position.marketValue)}</td><td class="numeric ${classForChange(position.unrealizedPnl)}">${formatAvailableSignedMoney(position.unrealizedPnl)}</td></tr>`).join('')}</tbody></table></div>` : `<div class="table-empty"><b>${canViewAssigned ? 'No assigned holdings yet.' : 'No holdings yet.'}</b><span>Propose an idea, wait for manager approval, then the manager records the paper fill.</span><a class="text-action" href="proposals">Open Proposals ↗</a></div>`}
     </section>
     <div class="data-footnote">${valuationComplete ? 'OPEN POSITIONS ARE MARKED ONLY WITH VERIFIED QUOTES.' : `VALUATION UNAVAILABLE FOR ${h(unpricedSymbols.join(', ') || 'ONE OR MORE OPEN POSITIONS')} UNTIL A VERIFIED QUOTE ARRIVES.`}<span>Cash and average cost remain available; no cost-based price estimate is substituted. Paper trades do not route to a broker.</span></div>
   `;
@@ -514,9 +523,9 @@ function historySvg(history) {
   const grid = Array.from({ length: 4 }, (_, index) => {
     const value = max - ((max - min) * index) / 3;
     const gridY = top + ((height - top - bottom) * index) / 3;
-    return `<g><line x1="${left}" y1="${gridY.toFixed(1)}" x2="${width - right}" y2="${gridY.toFixed(1)}" stroke="#263137"/><text x="${left - 8}" y="${(gridY + 3).toFixed(1)}" text-anchor="end">${h(formatMoney(value, { digits: 0 }))}</text></g>`;
+    return `<g><line x1="${left}" y1="${gridY.toFixed(1)}" x2="${width - right}" y2="${gridY.toFixed(1)}" stroke="#2a2a2a" stroke-dasharray="2 3"/><text x="${left - 8}" y="${(gridY + 3).toFixed(1)}" text-anchor="end">${h(formatMoney(value, { digits: 0 }))}</text></g>`;
   }).join('');
-  return `<svg class="equity-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${h(points.length ? `${points.length} daily marks for portfolio equity and SPY` : 'Portfolio equity chart')}"><g class="equity-grid">${grid}</g>${pathsFor('benchmarkEquity', '#8c9ca4')}${pathsFor('equity', '#52c3a2')}<text class="equity-date" x="${left}" y="${height - 5}">${h(points[0]?.date || '')}</text><text class="equity-date" x="${width - right}" y="${height - 5}" text-anchor="end">${h(points.at(-1)?.date || '')}</text></svg>`;
+  return `<svg class="equity-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${h(points.length ? `${points.length} daily marks for portfolio equity and SPY` : 'Portfolio equity chart')}"><g class="equity-grid">${grid}</g>${pathsFor('benchmarkEquity', '#5f9cff')}${pathsFor('equity', '#fb8b1e')}<text class="equity-date" x="${left}" y="${height - 5}">${h(points[0]?.date || '')}</text><text class="equity-date" x="${width - right}" y="${height - 5}" text-anchor="end">${h(points.at(-1)?.date || '')}</text></svg>`;
 }
 
 function activityPage(state) {
@@ -538,7 +547,7 @@ function activityPage(state) {
     ${heading('PAPER TRADE LEDGER', 'Activity', can(state, 'paper_trades.read_all') ? 'Club fills are linked to their approved proposal and attributed to the recording manager.' : 'Your recorded fills, with price, side, quantity, and proposal link.', trades.length ? `<span class="source-label source-neutral">${trades.length} ENTRIES</span>` : '')}
     <section class="panel ledger-table-panel"><div class="panel-heading"><div><div class="eyebrow">${can(state, 'paper_trades.read_all') ? 'CLUB LEDGER' : 'MY PAPER LEDGER'}</div><h2>Execution history</h2></div>${trades.length ? '<button class="button" type="button" data-action="export-trades">Export CSV ↓</button>' : ''}</div>
       ${trades.length ? `<div class="trade-filters"><label>SEARCH / SYMBOL, MEMBER, PROPOSAL<input id="trade-filter-symbol" value="${h(state.tradeSearch || '')}" placeholder="Filter ledger" autocomplete="off"></label><label>SIDE<select id="trade-filter-side"><option value="all" ${state.tradeFilterSide === 'all' ? 'selected' : ''}>All sides</option><option value="buy" ${state.tradeFilterSide === 'buy' ? 'selected' : ''}>Buy</option><option value="sell" ${state.tradeFilterSide === 'sell' ? 'selected' : ''}>Sell</option></select></label><label>SORT BY<select id="trade-sort"><option value="newest" ${state.tradeSort === 'newest' ? 'selected' : ''}>Newest first</option><option value="oldest" ${state.tradeSort === 'oldest' ? 'selected' : ''}>Oldest first</option><option value="value-high" ${state.tradeSort === 'value-high' ? 'selected' : ''}>Largest notional</option><option value="value-low" ${state.tradeSort === 'value-low' ? 'selected' : ''}>Smallest notional</option></select></label><span>${filteredTrades.length} / ${trades.length} entries</span><button type="button" class="text-action" data-action="clear-trade-filters">Reset</button></div>` : ''}
-      <div class="table-frame"><table class="data-table"><thead><tr><th>Recorded</th><th>Security</th><th>Account</th><th>Side</th><th>Shares</th><th>Fill price</th><th>Notional</th><th>Proposal</th></tr></thead><tbody>${filteredTrades.length ? filteredTrades.map((trade) => `<tr><td>${h(formatTime(trade.created_at))}</td><td><button class="instrument-select single-line" data-action="open-symbol" data-symbol="${h(trade.symbol)}"><b>${h(trade.symbol)}</b></button></td><td>${h(memberName(state, trade.author_id))}</td><td class="side-${h(trade.side)}">${h(trade.side.toUpperCase())}</td><td class="numeric">${formatNumber(trade.quantity, 4)}</td><td class="numeric">${formatMoney(trade.price)}</td><td class="numeric">${formatMoney(Number(trade.quantity) * Number(trade.price))}</td><td><a class="inline-link" href="#proposals">${h(String(trade.proposal_id).slice(0, 8))} ↗</a></td></tr>`).join('') : `<tr><td colspan="8" class="empty-cell">${trades.length ? 'No trades match these filters.' : 'No paper fills recorded.'}</td></tr>`}</tbody></table></div>
+      <div class="table-frame"><table class="data-table"><thead><tr><th>Recorded</th><th>Security</th><th>Account</th><th>Side</th><th>Shares</th><th>Fill price</th><th>Notional</th><th>Proposal</th></tr></thead><tbody>${filteredTrades.length ? filteredTrades.map((trade) => `<tr><td>${h(formatTime(trade.created_at))}</td><td><button class="instrument-select single-line" data-action="open-symbol" data-symbol="${h(trade.symbol)}"><b>${h(trade.symbol)}</b></button></td><td>${h(memberName(state, trade.author_id))}</td><td class="side-${h(trade.side)}">${h(trade.side.toUpperCase())}</td><td class="numeric">${formatNumber(trade.quantity, 4)}</td><td class="numeric">${formatMoney(trade.price)}</td><td class="numeric">${formatMoney(Number(trade.quantity) * Number(trade.price))}</td><td><a class="inline-link" href="proposals">${h(String(trade.proposal_id).slice(0, 8))} ↗</a></td></tr>`).join('') : `<tr><td colspan="8" class="empty-cell">${trades.length ? 'No trades match these filters.' : 'No paper fills recorded.'}</td></tr>`}</tbody></table></div>
     </section>
     ${trades.length ? '<div class="data-footnote">Paper fills link to approved proposals and are immutable.</div>' : ''}
   `;
@@ -602,12 +611,12 @@ function renderSimulationChart(result) {
   const max = Math.max(...values);
   const span = Math.max(max - min, max * 0.04, 0.01);
   const y = (value) => height - ((value - min) / span) * height;
-  const colors = ['#d8b36f','#70b9a3','#7da8cf','#c48072','#a995c9','#b0c788'];
+  const colors = ['#fb8b1e','#4af6c3','#5f9cff','#ff433d','#ffd400','#c792ea'];
   const lines = plotted.map((path, index) => {
     const points = path.map((value, step) => `${(step / (path.length - 1)) * width},${y(value).toFixed(1)}`).join(' ');
     return `<polyline points="${points}" fill="none" stroke="${colors[index % colors.length]}" stroke-opacity=".42" stroke-width="1"/>`;
   }).join('');
-  return `<svg class="quant-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Monte Carlo geometric Brownian motion scenario paths"><line x1="0" x2="${width}" y1="${y(result.parameters.initialPrice).toFixed(1)}" y2="${y(result.parameters.initialPrice).toFixed(1)}" stroke="#68757a" stroke-dasharray="4 5"/>${lines}</svg>`;
+  return `<svg class="quant-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Monte Carlo geometric Brownian motion scenario paths"><line x1="0" x2="${width}" y1="${y(result.parameters.initialPrice).toFixed(1)}" y2="${y(result.parameters.initialPrice).toFixed(1)}" stroke="#ffffff" stroke-opacity=".55" stroke-dasharray="4 5"/>${lines}</svg>`;
 }
 
 function quantMetric(label, value) {
@@ -684,7 +693,7 @@ function adminPage(state) {
 
 function compactProposal(proposal, link = false) {
   const row = `<div class="compact-proposal"><span class="proposal-symbol">${h(proposal.symbol)}</span><span class="compact-copy"><b>${h(proposal.side.toUpperCase())} / ${formatNumber(proposal.quantity, 4)} sh.</b><small>${h(String(proposal.thesis || '').slice(0, 90))}${proposal.thesis?.length > 90 ? '…' : ''}</small></span><span class="status-tag status-${h(proposal.status)}">${h(proposal.status)}</span></div>`;
-  return link ? `<a class="compact-proposal-link" href="#proposals">${row}</a>` : row;
+  return link ? `<a class="compact-proposal-link" href="proposals">${row}</a>` : row;
 }
 
 function compactTrade(state, trade) {

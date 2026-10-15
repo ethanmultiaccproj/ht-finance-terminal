@@ -88,9 +88,35 @@ function hasPermission(permission) {
   return state.permissions.includes(permission);
 }
 
-function hashState() {
+const LEGACY_ROUTES = new Set(['manager', 'members']);
+
+function isRouteSegment(segment) {
+  return ROUTES.has(segment) || LEGACY_ROUTES.has(segment);
+}
+
+// Routes are path segments relative to the directory the app is served from,
+// so the same build works at a domain root and under a subdirectory.
+function appBasePath() {
+  const segments = location.pathname.split('/');
+  if (isRouteSegment(segments.at(-1))) segments[segments.length - 1] = '';
+  return segments.join('/') || '/';
+}
+
+function routeUrl(route, query = '') {
+  return `${appBasePath()}${route === 'overview' ? '' : route}${query ? `?${query}` : ''}`;
+}
+
+// Older links used hash routes (#markets?symbol=SPY); move them to path routes.
+// Auth callback fragments (#access_token=…) are left for Supabase to read.
+function migrateLegacyHashRoute() {
   const [path = '', query = ''] = location.hash.replace(/^#/, '').split('?');
-  const params = new URLSearchParams(query);
+  if (!location.hash || !isRouteSegment(path)) return;
+  history.replaceState(history.state, '', routeUrl(path, query));
+}
+
+function routeState() {
+  const path = location.pathname.split('/').at(-1);
+  const params = new URLSearchParams(location.search);
   const legacyManagerRoute = path === 'manager';
   const legacyPeopleRoute = path === 'members';
   const route = legacyManagerRoute ? 'proposals' : legacyPeopleRoute ? 'admin' : ROUTES.has(path) ? path : 'overview';
@@ -104,17 +130,44 @@ function hashState() {
   state.route = route;
 }
 
-function setHash(route, params = {}) {
+function navigate(route, params = {}) {
   const query = new URLSearchParams();
   if (['markets', 'research'].includes(route) && params.symbol) query.set('symbol', params.symbol);
   if (['markets', 'research'].includes(route) && params.range && params.range !== '1M') query.set('range', params.range);
-  const next = `#${route}${query.size ? `?${query}` : ''}`;
-  if (location.hash === next) {
-    hashState();
+  const next = routeUrl(route, query.toString());
+  if (`${location.pathname}${location.search}` === next) {
+    routeState();
     render();
     return;
   }
-  location.hash = next;
+  history.pushState(null, '', next);
+  onRouteChange();
+}
+
+function onDocumentLinkClick(event) {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  const link = event.target.closest('a[href]');
+  if (!link || link.target || link.hasAttribute('download')) return;
+  const rawHref = link.getAttribute('href');
+  if (rawHref.startsWith('#')) {
+    // In-page anchors (the skip link) move focus without adding a fragment to the URL.
+    const target = document.getElementById(rawHref.slice(1));
+    if (target) {
+      event.preventDefault();
+      if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+      target.focus();
+    }
+    return;
+  }
+  const url = new URL(link.href);
+  if (url.origin !== location.origin) return;
+  const segment = url.pathname.split('/').at(-1);
+  if (segment && !isRouteSegment(segment)) return;
+  event.preventDefault();
+  if (`${url.pathname}${url.search}` !== `${location.pathname}${location.search}`) {
+    history.pushState(null, '', `${url.pathname}${url.search}`);
+  }
+  onRouteChange();
 }
 
 function changeSelectedSymbol(symbol) {
@@ -484,8 +537,8 @@ async function loadClubData() {
     state.adminTeams = [];
     state.auditLog = [];
   }
-  if (state.route === 'admin' && !hasPermission('members.manage')) setHash('overview');
-  if (state.route === 'quant' && !hasPermission('quant.experiments.run')) setHash('overview');
+  if (state.route === 'admin' && !hasPermission('members.manage')) navigate('overview');
+  if (state.route === 'quant' && !hasPermission('quant.experiments.run')) navigate('overview');
   render();
   if (state.route === 'portfolio') {
     const visibleIds = new Set([state.user.id, ...state.portfolioMembers.map((member) => member.user_id)]);
@@ -615,8 +668,7 @@ async function expandMarketChartRange() {
 
   const query = new URLSearchParams({ symbol });
   if (nextRange !== '1M') query.set('range', nextRange);
-  const nextHash = `#markets?${query}`;
-  history.replaceState(history.state, '', `${location.pathname}${location.search}${nextHash}`);
+  history.replaceState(history.state, '', routeUrl('markets', query.toString()));
 
   const loaded = await loadChartBars({ silent: true, keepPrevious: true });
   if (state.symbol !== symbol || state.chartRange !== nextRange) return loaded;
@@ -624,7 +676,7 @@ async function expandMarketChartRange() {
     state.chartRange = previousRange;
     const previousQuery = new URLSearchParams({ symbol });
     if (previousRange !== '1M') previousQuery.set('range', previousRange);
-    history.replaceState(history.state, '', `${location.pathname}${location.search}#markets?${previousQuery}`);
+    history.replaceState(history.state, '', routeUrl('markets', previousQuery.toString()));
     render();
   }
   return loaded;
@@ -818,7 +870,7 @@ function navigateToSymbol(value) {
   state.searchOpen = false;
   state.searchQuery = '';
   changeSelectedSymbol(symbol);
-  setHash('research', { symbol, range: state.chartRange });
+  navigate('research', { symbol, range: state.chartRange });
   void refreshMarketData({ silent: true });
 }
 
@@ -1177,7 +1229,7 @@ function onAppClick(event) {
     case 'proposal-filter': state.proposalFilter = status; render(); break;
     case 'chart-range':
       state.chartRange = range;
-      setHash('markets', { symbol: state.symbol, range });
+      navigate('markets', { symbol: state.symbol, range });
       void loadChartBars();
       break;
     case 'toggle-indicator': state[indicator] = !state[indicator]; render(); break;
@@ -1318,11 +1370,11 @@ function onAppSubmit(event) {
   }
 }
 
-function onHashChange() {
+function onRouteChange() {
   const oldRoute = state.route;
   const oldSymbol = state.symbol;
   const oldRange = state.chartRange;
-  hashState();
+  routeState();
   state.searchOpen = false;
   state.searchQuery = '';
   render();
@@ -1351,7 +1403,8 @@ function onGlobalKeydown(event) {
 }
 
 async function initialize() {
-  hashState();
+  migrateLegacyHashRoute();
+  routeState();
   if (state.route === 'markets') state.market.loadingBars = true;
   state.market.quotes = new Map();
   state.clock = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
@@ -1366,7 +1419,8 @@ async function initialize() {
       state.authMessage = '';
     }
   }, true);
-  window.addEventListener('hashchange', onHashChange);
+  window.addEventListener('popstate', onRouteChange);
+  document.addEventListener('click', onDocumentLinkClick);
   window.addEventListener('keydown', onGlobalKeydown);
   updateClock();
   setInterval(updateClock, 15_000);

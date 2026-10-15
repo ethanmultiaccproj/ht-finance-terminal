@@ -50,13 +50,13 @@ test('manager proposal queue consolidates review and fill actions without a sepa
   });
   const html = renderApplication(state);
 
-  assert.match(html, /href="#proposals"[^>]*>[\s\S]*?Proposals/);
+  assert.match(html, /href="proposals"[^>]*>[\s\S]*?Proposals/);
   assert.match(html, /Needs review/);
   assert.match(html, /Approved \/ unfilled/);
   assert.match(html, /data-form="proposal-review"/);
   assert.match(html, /data-form="execute"/);
   assert.doesNotMatch(html, /Manager desk|MEMBER PARTICIPATION \/ NOT RETURNS|NOTIONAL IS PAPER FILL SIZE/);
-  assert.doesNotMatch(html, /href="#manager"/);
+  assert.doesNotMatch(html, /href="manager"/);
 });
 
 test('Owner sees one People & Teams destination for group and member administration', () => {
@@ -68,7 +68,7 @@ test('Owner sees one People & Teams destination for group and member administrat
   ];
   const html = renderApplication(state);
 
-  assert.match(html, /href="#admin"[^>]*>[\s\S]*?People & Teams/);
+  assert.match(html, /href="admin"[^>]*>[\s\S]*?People & Teams/);
   assert.match(html, /People & Teams/);
   assert.match(html, /Group #1/);
   assert.match(html, /manager@example\.edu/);
@@ -76,7 +76,7 @@ test('Owner sees one People & Teams destination for group and member administrat
   assert.match(html, /<details class="team-admin-card /);
   assert.match(html, /data-form="team-managers"/);
   assert.match(html, /data-form="member-team"/);
-  assert.doesNotMatch(html, /Users & Permissions|Feed setup|href="#setup"|Manager desk/);
+  assert.doesNotMatch(html, /Users & Permissions|Feed setup|href="setup"|Manager desk/);
 });
 
 test('Owner can delete only an empty group from People & Teams', () => {
@@ -117,8 +117,8 @@ test('market chart offers All history and SMA 200 without showing a raw bar coun
 
 test('Intern navigation hides Owner and Quant administration', () => {
   const html = renderApplication(baseState());
-  assert.doesNotMatch(html, /href="#admin"|People & Teams|href="#quant"/);
-  assert.match(html, /href="#proposals"/);
+  assert.doesNotMatch(html, /href="admin"|People & Teams|href="quant"/);
+  assert.match(html, /href="proposals"/);
 });
 
 test('signed-out market view renders received IEX quotes and keeps the feed label explicit', () => {
@@ -190,12 +190,12 @@ test('Research is a distinct company workspace linked to Markets charts and club
   assert.match(research, /<span>RESEARCH<\/span>/);
   assert.match(research, /INSTRUMENT PROFILE/);
   assert.match(research, /Proposal activity/);
-  assert.match(research, /href="#markets\?symbol=SPY"/);
+  assert.match(research, /href="markets\?symbol=SPY"/);
   assert.match(markets, /id="price-chart"/);
   assert.match(markets, /PERSONAL WATCHLIST/);
   assert.doesNotMatch(markets, /Largest moves/);
   assert.equal((markets.match(/<table class="data-table/g) || []).length, 1);
-  assert.match(markets, /href="#research\?symbol=SPY"/);
+  assert.match(markets, /href="research\?symbol=SPY"/);
   assert.doesNotMatch(markets, /SYNTHETIC DEPTH|Generated ask levels|Illustrative market depth/);
   assert.doesNotMatch(markets, /INSTRUMENT PROFILE/);
 });
